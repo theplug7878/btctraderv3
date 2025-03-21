@@ -29,14 +29,19 @@ class TradingBot:
         self._set_position_mode()
         self.tick_size = self._get_tick_size()
         self.position_size = 0.04
-        self.profit_target = 0.70
-        self.stop_loss = -0.30
+        self.profit_target = 0.70  # 70% profit target
+        self.stop_loss = -0.30     # -30% initial stop loss
         self.model = self._initialize_ml_model()
         self.groq_client = Groq(api_key=self.groq_api_key)
         self.last_close_time = None
         self.running = False
         self.status = {"message": "Bot initialized", "position": None, "last_action": None}
-        logging.info("Trading bot initialized with ML model (LightGBM) and Groq API")
+        # Trailing stop loss attributes
+        self.trailing_activation = 0.35  # 35% profit to activate trailing stop
+        self.trailing_distance = 0.10    # 10% below peak profit as trailing stop
+        self.trailing_stop_price = None  # Dynamic stop price, initialized per trade
+        self.highest_profit = 0.0        # Track highest profit for each position
+        logging.info("Trading bot initialized with ML model (LightGBM), Groq API, and trailing stop loss")
 
     def _initialize_exchange(self) -> ccxt.phemex:
         try:
@@ -260,6 +265,9 @@ class TradingBot:
             logging.info(f"Closed {direction} leveraged position")
             self.last_close_time = time.time()
             self.status["last_action"] = f"Closed {direction} position"
+            # Reset trailing stop variables after closing
+            self.trailing_stop_price = None
+            self.highest_profit = 0.0
         except Exception as e:
             logging.error(f"Error closing position: {e}")
 
@@ -285,7 +293,7 @@ class TradingBot:
             return {}
 
     def run(self) -> None:
-        logging.info("Starting trading bot with ML data (LightGBM), Groq decisions, and 5-min delay after trades...")
+        logging.info("Starting trading bot with ML data (LightGBM), Groq decisions, 5-min delay, and trailing stop loss...")
         self.running = True
         decision_time = None
         post_close_delay = 300  # 5 minutes in seconds
@@ -306,12 +314,39 @@ class TradingBot:
                                  f"Current: {current_price:.2f} | P/L: {pl*100:.2f}%")
                     self.status["message"] = f"Monitoring {direction} position, P/L: {pl*100:.2f}%"
                     
+                    # Update highest profit
+                    self.highest_profit = max(self.highest_profit, pl)
+                    
+                    # Check initial profit target and stop loss
                     if pl >= self.profit_target:
                         logging.info(f"Profit target {self.profit_target*100}% reached")
                         self._close_position(direction)
                     elif pl <= self.stop_loss:
-                        logging.info(f"Stop loss {self.stop_loss*100}% triggered")
+                        logging.info(f"Initial stop loss {self.stop_loss*100}% triggered")
                         self._close_position(direction)
+                    # Trailing stop logic
+                    elif self.highest_profit >= self.trailing_activation:
+                        if direction == 'long':
+                            # Calculate new trailing stop price (10% below highest price achieved)
+                            highest_price = entry_price * (1 + self.highest_profit / position['leverage'])
+                            new_trailing_stop = highest_price * (1 - self.trailing_distance)
+                            self.trailing_stop_price = max(self.trailing_stop_price or 0, new_trailing_stop)
+                            logging.info(f"Trailing stop active | Highest P/L: {self.highest_profit*100:.2f}% | "
+                                         f"Stop Price: {self.trailing_stop_price:.2f}")
+                            if current_price <= self.trailing_stop_price:
+                                logging.info(f"Trailing stop triggered at {self.trailing_stop_price:.2f} | P/L: {pl*100:.2f}%")
+                                self._close_position(direction)
+                        else:  # short
+                            highest_price = entry_price * (1 - self.highest_profit / position['leverage'])
+                            new_trailing_stop = highest_price * (1 + self.trailing_distance)
+                            self.trailing_stop_price = min(self.trailing_stop_price or float('inf'), new_trailing_stop)
+                            logging.info(f"Trailing stop active | Highest P/L: {self.highest_profit*100:.2f}% | "
+                                         f"Stop Price: {self.trailing_stop_price:.2f}")
+                            if current_price >= self.trailing_stop_price:
+                                logging.info(f"Trailing stop triggered at {self.trailing_stop_price:.2f} | P/L: {pl*100:.2f}%")
+                                self._close_position(direction)
+                    else:
+                        logging.info(f"P/L {pl*100:.2f}% below trailing activation {self.trailing_activation*100}%")
                 else:
                     logging.info(f"No open positions | Current Price: {current_price or 'N/A'}")
                     self.status["message"] = "No open positions"
@@ -322,10 +357,10 @@ class TradingBot:
                             remaining_time = post_close_delay - time_since_close
                             logging.info(f"Delaying ML/AI analysis after trade closure... {remaining_time:.1f} seconds remaining")
                             self.status["message"] = f"Delaying ML/AI analysis, {remaining_time:.1f}s remaining"
-                            time.sleep(min(5, remaining_time))  # Sleep in small increments, max 5s
+                            time.sleep(min(5, remaining_time))
                             continue
                     
-                    # After delay, proceed with ML and AI analysis
+                    # Fetch data and make trades
                     df = self.fetch_historical_data(timeframe='5m', limit=100, pages=1)
                     df_processed = self.prepare_data(df)
                     if not df_processed.empty:
@@ -342,6 +377,8 @@ class TradingBot:
                             success = self.place_market_order(direction)
                             if success:
                                 decision_time = None
+                                self.trailing_stop_price = None  # Reset for new trade
+                                self.highest_profit = 0.0
                             else:
                                 logging.error("Failed to place order, retrying next cycle")
                                 self.status["message"] = "Failed to place order, retrying"
@@ -350,7 +387,7 @@ class TradingBot:
                             self.status["message"] = f"Groq analyzing, {60 - time_elapsed:.1f}s remaining"
                     else:
                         logging.info("No sufficient data for prediction, waiting...")
-                        self.status["message"] = Hannahsford.com.au
+                        self.status["message"] = "No sufficient data"
                         decision_time = None
             
             except Exception as e:
