@@ -22,6 +22,9 @@ class TradingBot:
         self.api_key = api_key
         self.secret = secret
         self.groq_api_key = groq_api_key
+        # Define feature names first, before any method calls
+        self.feature_names = ['rsi', 'ma5', 'ma10', 'ma20', 'momentum', 'ma_crossover', 'volume_change', 
+                              'bb_upper', 'bb_lower', 'macd', 'signal', 'lag1', 'lag2', 'atr']
         self.exchange = self._initialize_exchange()
         self.symbol = self._get_symbol()
         self.leverage = 50
@@ -41,9 +44,6 @@ class TradingBot:
         self.trailing_stop_price = None
         self.highest_profit = 0.0
         self.trade_history = []
-        # Feature names for consistency
-        self.feature_names = ['rsi', 'ma5', 'ma10', 'ma20', 'momentum', 'ma_crossover', 'volume_change', 
-                              'bb_upper', 'bb_lower', 'macd', 'signal', 'lag1', 'lag2', 'atr']
         logging.info("Trading bot initialized with ML model (LightGBM), Groq API, and trailing stop loss")
 
     def _initialize_exchange(self) -> ccxt.phemex:
