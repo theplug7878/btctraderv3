@@ -32,15 +32,15 @@ class TradingBot:
         self._set_position_mode()
         self.tick_size = self._get_tick_size()
         self.position_size = 0.04
-        self.profit_target = 0.70
-        self.stop_loss = -0.30
+        self.profit_target = 0.005
+        self.stop_loss = -0.005
         self.model = self._initialize_ml_model()
         self.groq_client = Groq(api_key=self.groq_api_key)
         self.last_close_time = None
         self.running = False
         self.status = {"message": "Bot initialized", "position": None, "last_action": None}
-        self.trailing_activation = 0.35
-        self.trailing_distance = 0.10
+        self.trailing_activation = 0.005
+        self.trailing_distance = 0.35
         self.trailing_stop_price = None
         self.highest_profit = 0.0
         self.trade_history = []
