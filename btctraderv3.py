@@ -36,13 +36,14 @@ class TradingBot:
         self.last_close_time = None
         self.running = False
         self.status = {"message": "Bot initialized", "position": None, "last_action": None}
-        # Trailing stop loss attributes
         self.trailing_activation = 0.35
         self.trailing_distance = 0.10
         self.trailing_stop_price = None
         self.highest_profit = 0.0
-        # Trade history for retraining
-        self.trade_history = []  # List to store trade data: {'entry_price': float, 'exit_price': float, 'direction': str, 'timestamp': float}
+        self.trade_history = []
+        # Feature names for consistency
+        self.feature_names = ['rsi', 'ma5', 'ma10', 'ma20', 'momentum', 'ma_crossover', 'volume_change', 
+                              'bb_upper', 'bb_lower', 'macd', 'signal', 'lag1', 'lag2', 'atr']
         logging.info("Trading bot initialized with ML model (LightGBM), Groq API, and trailing stop loss")
 
     def _initialize_exchange(self) -> ccxt.phemex:
@@ -187,12 +188,11 @@ class TradingBot:
         df['target'] = np.where(df['pct_change'] > 0.005, 1, np.where(df['pct_change'] < -0.005, 0, np.nan))
         df = df.dropna()
         logging.info(f"Samples after target filtering: {len(df)}")
-        X = df[['rsi', 'ma5', 'ma10', 'ma20', 'momentum', 'ma_crossover', 'volume_change', 
-                'bb_upper', 'bb_lower', 'macd', 'signal', 'lag1', 'lag2', 'atr']]
+        X = df[self.feature_names]
         y = df['target']
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
         model = LGBMClassifier(
- imbalance            n_estimators=200,
+            n_estimators=200,
             max_depth=5,
             learning_rate=0.1,
             random_state=42,
@@ -207,19 +207,16 @@ class TradingBot:
         return model
 
     def _retrain_ml_model(self, entry_price: float, exit_price: float, direction: str) -> None:
-        """Retrain the ML model with updated trade data."""
         try:
-            # Add the latest trade to history
             trade = {
                 'entry_price': entry_price,
                 'exit_price': exit_price,
                 'direction': direction,
-                'timestamp': time.time() * 1000  # Current time in milliseconds
+                'timestamp': time.time() * 1000
             }
             self.trade_history.append(trade)
             logging.info(f"Trade added to history: {trade}")
 
-            # Fetch fresh historical data
             df = self.fetch_historical_data(timeframe='5m', limit=1000, pages=19, use_binance=True)
             logging.info(f"Raw candles fetched for retraining: {len(df)}")
             df = self.prepare_data(df)
@@ -229,7 +226,6 @@ class TradingBot:
                 logging.warning("Insufficient data for retraining, skipping...")
                 return
 
-            # Append trade outcome to the dataset
             latest_candle = df.iloc[-1].copy()
             pct_change = (exit_price - entry_price) / entry_price if direction == 'long' else (entry_price - exit_price) / entry_price
             target = 1 if pct_change > 0.005 else 0 if pct_change < -0.005 else np.nan
@@ -247,8 +243,7 @@ class TradingBot:
                 logging.warning("Too few samples after filtering, skipping retraining...")
                 return
 
-            X = df[['rsi', 'ma5', 'ma10', 'ma20', 'momentum', 'ma_crossover', 'volume_change', 
-                    'bb_upper', 'bb_lower', 'macd', 'signal', 'lag1', 'lag2', 'atr']]
+            X = df[self.feature_names]
             y = df['target']
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
             
@@ -272,8 +267,7 @@ class TradingBot:
         try:
             latest_data = data.iloc[-1]
             trend = "up" if data['close'].iloc[-1] > data['close'].iloc[-5] else "down"
-            X_latest = latest_data[['rsi', 'ma5', 'ma10', 'ma20', 'momentum', 'ma_crossover', 'volume_change', 
-                                    'bb_upper', 'bb_lower', 'macd', 'signal', 'lag1', 'lag2', 'atr']].values.reshape(1, -1)
+            X_latest = pd.DataFrame([latest_data[self.feature_names]], columns=self.feature_names)
             ml_pred = self.model.predict(X_latest)[0]
             ml_direction = 'long' if ml_pred == 1 else 'short'
             prompt = (
@@ -329,10 +323,8 @@ class TradingBot:
             logging.info(f"Closed {direction} leveraged position | Entry: {entry_price:.2f} | Exit: {exit_price:.2f}")
             self.last_close_time = time.time()
             self.status["last_action"] = f"Closed {direction} position"
-            # Reset trailing stop variables
             self.trailing_stop_price = None
             self.highest_profit = 0.0
-            # Retrain the ML model with this trade
             self._retrain_ml_model(entry_price, exit_price, direction)
         except Exception as e:
             logging.error(f"Error closing position: {e}")
@@ -362,7 +354,7 @@ class TradingBot:
         logging.info("Starting trading bot with ML data (LightGBM), Groq decisions, 5-min delay, and trailing stop loss...")
         self.running = True
         decision_time = None
-        post_close_delay = 300  # 5 minutes in seconds
+        post_close_delay = 300
         
         while self.running:
             try:
@@ -380,17 +372,14 @@ class TradingBot:
                                  f"Current: {current_price:.2f} | P/L: {pl*100:.2f}%")
                     self.status["message"] = f"Monitoring {direction} position, P/L: {pl*100:.2f}%"
                     
-                    # Update highest profit
                     self.highest_profit = max(self.highest_profit, pl)
                     
-                    # Check initial profit target and stop loss
                     if pl >= self.profit_target:
                         logging.info(f"Profit target {self.profit_target*100}% reached")
                         self._close_position(direction, entry_price, current_price)
                     elif pl <= self.stop_loss:
                         logging.info(f"Initial stop loss {self.stop_loss*100}% triggered")
                         self._close_position(direction, entry_price, current_price)
-                    # Trailing stop logic
                     elif self.highest_profit >= self.trailing_activation:
                         if direction == 'long':
                             highest_price = entry_price * (1 + self.highest_profit / position['leverage'])
@@ -401,7 +390,7 @@ class TradingBot:
                             if current_price <= self.trailing_stop_price:
                                 logging.info(f"Trailing stop triggered at {self.trailing_stop_price:.2f} | P/L: {pl*100:.2f}%")
                                 self._close_position(direction, entry_price, current_price)
-                        else:  # short
+                        else:
                             highest_price = entry_price * (1 - self.highest_profit / position['leverage'])
                             new_trailing_stop = highest_price * (1 + self.trailing_distance)
                             self.trailing_stop_price = min(self.trailing_stop_price or float('inf'), new_trailing_stop)
@@ -425,7 +414,6 @@ class TradingBot:
                             time.sleep(min(5, remaining_time))
                             continue
                     
-                    # Fetch data and make trades
                     df = self.fetch_historical_data(timeframe='5m', limit=100, pages=1)
                     df_processed = self.prepare_data(df)
                     if not df_processed.empty:
