@@ -31,7 +31,7 @@ class TradingBot:
         self._set_leverage()
         self._set_position_mode()
         self.tick_size = self._get_tick_size()
-        self.position_size = 0.04
+        self.position_size = 0.02
         self.profit_target = 0.70
         self.stop_loss = -0.30
         self.model = self._initialize_ml_model()
@@ -354,7 +354,7 @@ class TradingBot:
         logging.info("Starting trading bot with ML data (LightGBM), Groq decisions, 5-min delay, and trailing stop loss...")
         self.running = True
         decision_time = None
-        post_close_delay = 300
+        post_close_delay = 900
         
         while self.running:
             try:
