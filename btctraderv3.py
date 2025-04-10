@@ -31,7 +31,7 @@ class TradingBot:
         self._set_leverage()
         self._set_position_mode()
         self.tick_size = self._get_tick_size()
-        self.position_size = 0.002
+        self.position_size = 0.02
         self.profit_target = 0.30
         self.stop_loss = -0.10
         self.model = self._initialize_ml_model()
