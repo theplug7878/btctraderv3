@@ -27,20 +27,20 @@ class TradingBot:
                               'bb_upper', 'bb_lower', 'macd', 'signal', 'lag1', 'lag2', 'atr']
         self.exchange = self._initialize_exchange()
         self.symbol = self._get_symbol()
-        self.leverage = 50
+        self.leverage = 20
         self._set_leverage()
         self._set_position_mode()
         self.tick_size = self._get_tick_size()
-        self.position_size = 0.02
-        self.profit_target = 0.70
-        self.stop_loss = -0.30
+        self.position_size = 0.002
+        self.profit_target = 0.30
+        self.stop_loss = -0.10
         self.model = self._initialize_ml_model()
         self.groq_client = Groq(api_key=self.groq_api_key)
         self.last_close_time = None
         self.running = False
         self.status = {"message": "Bot initialized", "position": None, "last_action": None}
-        self.trailing_activation = 0.35
-        self.trailing_distance = 0.15
+        self.trailing_activation = 0.25
+        self.trailing_distance = 0.10
         self.trailing_stop_price = None
         self.highest_profit = 0.0
         self.trade_history = []
