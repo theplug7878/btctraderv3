@@ -52,12 +52,7 @@ class TradingBot:
                 'apiKey': self.api_key,
                 'secret': self.secret,
                 'enableRateLimit': True,
-                'test': True,
-                'options': {
-                    'defaultType': 'swap',
-                    'testnet': True,
-                    'urls': {'api': 'https://testnet-api.phemex.com'}
-                }
+                'options': {'defaultType': 'swap'}
             })
             balance = exchange.fetch_balance()
             usdt_balance = balance['total'].get('USDT', 0)
