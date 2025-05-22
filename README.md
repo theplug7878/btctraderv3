@@ -1,5 +1,5 @@
-Trading Bot README
-Overview
+##Trading Bot README
+##Overview
 This project is a Python-based trading bot for trading BTC/USDT perpetual futures on the Phemex exchange. The bot uses a LightGBM machine learning model for price prediction, integrates with the Groq API for trade decision-making, and includes a Flask web server for monitoring and controlling the bot. It features technical indicators (e.g., RSI, MACD, Bollinger Bands), trailing stop-loss, and a retraining mechanism for the ML model based on trade outcomes.
 Key Features:
 Fetches historical and real-time market data using the CCXT library.
